@@ -1,28 +1,24 @@
 using System.Diagnostics.Metrics;
+using System.Reflection;
 
 namespace Order.Worker.Observability.Metrics;
 
 public class AppMetrics : IDisposable
 {
-    private readonly Meter _meter = new("Order.Worker", "1.0.0");
+    private readonly Meter _meter;
     
-    // Contadores principais
     private readonly Counter<long> _messagesConsumedCounter;
     private readonly Counter<long> _duplicateMessagesCounter;
     private readonly Counter<long> _ordersProcessedCounter;
     private readonly Counter<decimal> _totalRevenueCounter;
     
-    // Histogramas
     private readonly Histogram<double> _processingDurationHistogram;
     private readonly Histogram<decimal> _orderValueHistogram;
-    
-    // Gauges
+
     private readonly ObservableGauge<long> _activeProcessingGauge;
     
-    // Contadores de erro
     private readonly Counter<long> _processingErrorsCounter;
     
-    // Contadores por faixa de valor (cacheados)
     private readonly Counter<long> _ordersSmallCounter;
     private readonly Counter<long> _ordersMediumCounter;
     private readonly Counter<long> _ordersLargeCounter;
@@ -30,10 +26,16 @@ public class AppMetrics : IDisposable
     
     private long _activeProcessingCount;
 
-    public AppMetrics()
+    public AppMetrics(IHostEnvironment env)
     {
-        // IMPORTANTE: Use nomes compatíveis com Prometheus/Grafana
-        // Prometheus recomenda: snake_case, sem pontos, prefixo
+        var serviceName = env.ApplicationName;
+        var serviceVersion =
+            Assembly.GetEntryAssembly()?
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                .InformationalVersion ?? throw new InvalidOperationException();
+        
+        _meter = new Meter(serviceName, serviceVersion);
+        
         _messagesConsumedCounter = _meter.CreateCounter<long>(
             name: "worker_messages_consumed_total",
             unit: "messages",

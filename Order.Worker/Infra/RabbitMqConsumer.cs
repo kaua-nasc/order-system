@@ -11,10 +11,7 @@ using RabbitMQ.Client.Events;
 
 namespace Order.Worker.Infra;
 
-public class RabbitMqConsumer(
-    ILogger<Worker> logger, 
-    MessageProcessor processor,
-    AppTracing tracer)
+public class RabbitMqConsumer(ILogger<Worker> logger, MessageProcessor processor, AppTracing tracer)
 {
     private IConnection? _connection;
     private IChannel? _channel;
@@ -31,7 +28,14 @@ public class RabbitMqConsumer(
             global: false,
             cancellationToken
         );
-        await _channel.QueueDeclareAsync("test", false, false, false, arguments: null, cancellationToken: cancellationToken);
+        await _channel.QueueDeclareAsync(
+            "test", 
+            false, 
+            false, 
+            false, 
+            arguments: null, 
+            cancellationToken: cancellationToken
+        );
 
         var consumer = new AsyncEventingBasicConsumer(_channel);
         consumer.ReceivedAsync += async (_, ea) =>

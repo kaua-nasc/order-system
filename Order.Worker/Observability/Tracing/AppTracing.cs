@@ -1,20 +1,33 @@
 using System.Diagnostics;
+using System.Reflection;
 
 namespace Order.Worker.Observability.Tracing;
-
-public class AppTracing : IDisposable
+public sealed class AppTracing : IDisposable
 {
-    public const string ActivitySourceName = "Order.Worker";
-    public const string ActivitySourceVersion = "1.0.0";
-    public ActivitySource Source { get; } = new(ActivitySourceName, ActivitySourceVersion);
+    public ActivitySource Source { get; }
 
-    public Activity? StartActivity(string name, ActivityKind kind = ActivityKind.Internal)
+    public AppTracing(IHostEnvironment env)
     {
-        return Source.StartActivity(name, kind);
+        var serviceName = env.ApplicationName;
+        var serviceVersion =
+            Assembly.GetEntryAssembly()?
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                .InformationalVersion ?? throw new InvalidOperationException();
+
+        Source = new ActivitySource(serviceName, serviceVersion);
     }
-    
+
+    public Activity? StartActivity(
+        string name,
+        ActivityKind kind = ActivityKind.Internal,
+        ActivityContext parentContext = default)
+    {
+        return Source.StartActivity(name, kind, parentContext);
+    }
+
     public void Dispose()
     {
+        Source.Dispose();
         GC.SuppressFinalize(this);
     }
 }

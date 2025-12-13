@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using OpenTelemetry.Exporter;
@@ -15,8 +16,7 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddHostedService<Worker>();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContextFactory<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+builder.Services.AddDbContextFactory<AppDbContext>(options => options.UseNpgsql(connectionString));
 
 builder.Services
     .AddSingleton<AppTracing>()
@@ -24,34 +24,44 @@ builder.Services
     .AddSingleton<MessageProcessor>()
     .AddSingleton<RabbitMqConsumer>();
 
+var otlpExporterEndpoint = Environment.GetEnvironmentVariable("OTLP_EXPORTER_ENDPOINT") 
+    ?? throw new InvalidOperationException("OTLP_EXPORTER_ENDPOINT not set");
+
+var serviceName = builder.Environment.ApplicationName;
+
+var serviceVersion =
+    Assembly.GetEntryAssembly()?
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+        .InformationalVersion ?? throw new InvalidOperationException();
+    
 var resourceBuilder = ResourceBuilder.CreateDefault()
-    .AddService(AppTracing.ActivitySourceName, serviceVersion: AppTracing.ActivitySourceVersion);
+    .AddService(serviceName, serviceVersion: serviceVersion, serviceInstanceId: Environment.MachineName);
+
 builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics =>
     {
         metrics
-            .AddMeter("Order.Worker")
+            .AddMeter(serviceName)
+            .SetResourceBuilder(resourceBuilder)
             .AddOtlpExporter((cfg, options) =>
             {
                 cfg.Protocol = OtlpExportProtocol.Grpc;
-                cfg.Endpoint = new Uri("http://localhost:4317");
-                options.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 1000;
+                cfg.Endpoint = new Uri(otlpExporterEndpoint);
+                options.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 5000;
             });
     })
     .WithTracing(tracing =>
     {
         tracing
-            .AddSource(AppTracing.ActivitySourceName)
+            .AddSource(serviceName)
             .SetResourceBuilder(resourceBuilder)
-            .AddAspNetCoreInstrumentation()
             .AddNpgsql()
             .AddEntityFrameworkCoreInstrumentation()
             .AddOtlpExporter(cfg =>
             {
                 cfg.Protocol = OtlpExportProtocol.Grpc;
-                cfg.Endpoint = new Uri("http://localhost:4317");
+                cfg.Endpoint = new Uri(otlpExporterEndpoint);
             });
     });
 
-var host = builder.Build();
-await host.RunAsync();
+await builder.Build().RunAsync();
