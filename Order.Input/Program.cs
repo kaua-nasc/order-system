@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using OpenTelemetry.Exporter;
@@ -13,37 +14,49 @@ using Order.Input.Extensions;
 using Order.Input.Filters;
 using Order.Input.Infra.MessageBroker;
 using Order.Input.Observability.Metrics;
-using Order.Input.Tracing;
+using Order.Input.Observability.Tracing;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 
-builder.Services.AddSingleton<AppTracing>();
-builder.Services.AddSingleton<AppMetrics>();
-builder.Services.AddSingleton<IMessagePublisher, RabbitMqPublisher>();
-builder.Services.AddHostedService<PublisherInitializerHostedService>();
-builder.Services.AddScoped<Validator<OrderValueObject>>();
-builder.Services.AddSpecificationsFromAssemblyContaining<OrderSpecification>();
+builder.Services
+    .AddSingleton<AppTracing>()
+    .AddSingleton<AppMetrics>()
+    .AddSingleton<RabbitMqPublisher>()
+    .AddHostedService<PublisherInitializerHostedService>()
+    .AddScoped<Validator<OrderValueObject>>()
+    .AddSpecificationsFromAssemblyContaining<OrderSpecification>();
+
+var otlpExporterEndpoint = Environment.GetEnvironmentVariable("OTLP_EXPORTER_ENDPOINT") 
+    ?? throw new InvalidOperationException("OTLP_EXPORTER_ENDPOINT not set");
+
+var serviceName = builder.Environment.ApplicationName;
+
+var serviceVersion =
+    Assembly.GetEntryAssembly()?
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+        .InformationalVersion ?? throw new InvalidOperationException();
 
 var resourceBuilder = ResourceBuilder.CreateDefault()
-    .AddService(AppTracing.ActivitySourceName, serviceVersion: AppTracing.ActivitySourceVersion);
+    .AddService(serviceName, serviceVersion: serviceVersion, serviceInstanceId: Environment.MachineName);
 builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics =>
     {
         metrics
-            .AddMeter("Order.Input")
+            .AddMeter(serviceName)
+            .SetResourceBuilder(resourceBuilder)
             .AddOtlpExporter((cfg, options) =>
             {
                 cfg.Protocol = OtlpExportProtocol.Grpc;
-                cfg.Endpoint = new Uri("http://localhost:4317");
+                cfg.Endpoint = new Uri(otlpExporterEndpoint);
                 options.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 1000;
             });
     })
     .WithTracing(tracing =>
     {
         tracing
-            .AddSource(AppTracing.ActivitySourceName)
+            .AddSource(serviceName)
             .SetResourceBuilder(resourceBuilder)
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
@@ -52,9 +65,8 @@ builder.Services.AddOpenTelemetry()
             .AddOtlpExporter(cfg =>
             {
                 cfg.Protocol = OtlpExportProtocol.Grpc;
-                cfg.Endpoint = new Uri("http://localhost:4317");
-            })
-            .AddConsoleExporter();
+                cfg.Endpoint = new Uri(otlpExporterEndpoint);
+            });
     });
 
 var app = builder.Build();
@@ -70,7 +82,7 @@ app.MapPost("/register/order",
         ILogger<Program> logger,
         AppTracing tracer,
         AppMetrics metrics,
-        IMessagePublisher publisher,
+        RabbitMqPublisher publisher,
         [FromBody] OrderValueObject order) =>
     {
         using var act = tracer.StartActivity("RegisterOrder", ActivityKind.Producer);

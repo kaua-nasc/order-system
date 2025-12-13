@@ -8,7 +8,7 @@
       "applicationUrl": "http://localhost:5015",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "OTLP_ENDPOINT_URL": "http://localhost:4317"
+        "OTLP_EXPORTER_ENDPOINT": "http://localhost:4317"
       }
     },
     "https": {
@@ -17,7 +17,8 @@
       "launchBrowser": false,
       "applicationUrl": "https://localhost:7017;http://localhost:5015",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "OTLP_EXPORTER_ENDPOINT": "http://localhost:4317"
       }
     }
   }

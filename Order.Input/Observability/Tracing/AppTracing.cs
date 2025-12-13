@@ -1,12 +1,21 @@
 using System.Diagnostics;
+using System.Reflection;
 
-namespace Order.Input.Tracing;
+namespace Order.Input.Observability.Tracing;
 
 public class AppTracing : IDisposable
 {
-    public const string ActivitySourceName = "Order.Input";
-    public const string ActivitySourceVersion = "1.0.0";
-    public ActivitySource Source { get; } = new(ActivitySourceName, ActivitySourceVersion);
+    private ActivitySource Source { get; }
+    public AppTracing(IHostEnvironment env)
+    {
+        var serviceName = env.ApplicationName;
+        var serviceVersion =
+            Assembly.GetEntryAssembly()?
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                .InformationalVersion ?? throw new InvalidOperationException();
+
+        Source = new ActivitySource(serviceName, serviceVersion);
+    }
 
     public Activity? StartActivity(string name, ActivityKind kind = ActivityKind.Internal)
     {

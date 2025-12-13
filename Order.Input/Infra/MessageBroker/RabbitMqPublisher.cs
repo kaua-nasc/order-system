@@ -5,12 +5,12 @@ using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
 using Order.Input.Domain.Commons;
 using Order.Input.Observability.Metrics;
-using Order.Input.Tracing;
+using Order.Input.Observability.Tracing;
 using RabbitMQ.Client;
 
 namespace Order.Input.Infra.MessageBroker;
 
-public class RabbitMqPublisher(AppTracing tracer, AppMetrics metrics) : IMessagePublisher, IAsyncDisposable
+public class RabbitMqPublisher(AppTracing tracer, AppMetrics metrics) : IAsyncDisposable
 {
     private readonly ConnectionFactory _factory = new() { HostName = "localhost", UserName = "admin", Password = "admin"};
     private IConnection? _connection;   

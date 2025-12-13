@@ -1,8 +1,6 @@
-using RabbitMQ.Client;
-
 namespace Order.Input.Infra.MessageBroker;
 
-public class PublisherInitializerHostedService(IMessagePublisher publisher) : IHostedService
+public class PublisherInitializerHostedService(RabbitMqPublisher publisher) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
