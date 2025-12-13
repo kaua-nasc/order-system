@@ -8,7 +8,10 @@
       "applicationUrl": "http://localhost:5015",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "OTLP_EXPORTER_ENDPOINT": "http://localhost:4317"
+        "OTLP_EXPORTER_ENDPOINT": "http://localhost:4317",
+        "RabbitMQ:Host": "localhost",
+        "RabbitMQ:User": "admin",
+        "RabbitMQ:Pass": "admin"
       }
     },
     "https": {

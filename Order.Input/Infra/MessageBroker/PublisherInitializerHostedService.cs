@@ -9,6 +9,6 @@ public class PublisherInitializerHostedService(RabbitMqPublisher publisher) : IH
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        return publisher.DisposeAsync().AsTask();
+        return Task.CompletedTask;
     }
 }

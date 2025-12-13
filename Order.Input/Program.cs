@@ -96,6 +96,8 @@ app.MapPost("/register/order",
 
             logger.LogInformation("Order {OrderId} registered successfully", order.OrderId);
 
+            act?.SetStatus(ActivityStatusCode.Ok);
+            
             return Results.Created(
                 $"/orders/{order.OrderId}",
                 new
@@ -124,10 +126,6 @@ app.MapPost("/register/order",
                 statusCode: StatusCodes.Status500InternalServerError,
                 instance: $"/orders/errors/{Guid.NewGuid()}"
             );
-        }
-        finally
-        {
-            act?.SetStatus(ActivityStatusCode.Ok);
         }
     }).AddEndpointFilter<ValidationFilter<OrderValueObject>>();
 
