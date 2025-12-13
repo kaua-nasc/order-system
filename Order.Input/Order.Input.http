@@ -1,0 +1,32 @@
+@Input_HostAddress = http://localhost:5015
+
+###
+
+GET {{Input_HostAddress}}/send/1200
+Accept: application/json
+
+### 
+
+POST {{Input_HostAddress}}/register/order
+Content-Type: application/json
+
+{
+  "orderId": "65a5bbca-353b-4675-bbcc-935c3eb71704",
+  "customerId": "c9d4c053-49b6-410c-bc78-2d54a9991870",
+  "totalAmount": 299.99,
+  "createdAt": "2024-01-15T10:30:00Z",
+  "items": [
+    {
+      "productId": "550e8400-e29b-41d4-a716-446655440000",
+      "productName": "Smartphone XYZ",
+      "quantity": 1,
+      "unitPrice": 299.99
+    },
+    {
+      "productId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "productName": "Capinha Protetora",
+      "quantity": 2,
+      "unitPrice": 25.00
+    }
+  ]
+}
