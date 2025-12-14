@@ -5,18 +5,36 @@ receivers:
         endpoint: 0.0.0.0:4319
       http:
         endpoint: 0.0.0.0:4320
+
 extensions:
   jaeger_query:
     storage:
-      traces: memstore
+      traces: some_store
+      traces_archive: another_store
+
   jaeger_storage:
     backends:
-      memstore:
-        memory:
-          max_traces: 10000
+      some_store:
+        badger:
+          directories:
+            keys: "/tmp/jaeger/"
+            values: "/tmp/jaeger/"
+          ephemeral: false
+          ttl:
+            spans: 48h
+      another_store:
+        badger:
+          directories:
+            keys: "/tmp/jaeger_archive/"
+            values: "/tmp/jaeger_archive/"
+          ephemeral: false
+          ttl:
+            spans: 720h
+
 exporters:
   jaeger_storage_exporter:
-    trace_storage: memstore
+    trace_storage: some_store
+
 service:
   extensions: [jaeger_storage, jaeger_query]
   pipelines:

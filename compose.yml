@@ -5,9 +5,10 @@ services:
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
     ports:
-      - 4317:4317
-      - 4318:4318
-      - 8889:8889
+      - "${PORT_OTEL_GRPC}:4317"
+      - "${PORT_OTEL_HTTP}:4318"
+      - "8889:8889"
+
   jaeger:
     image: jaegertracing/jaeger:latest
     container_name: jaeger
@@ -17,19 +18,39 @@ services:
       - "16686:16686"
     volumes:
       - ./jaeger-config.yaml:/etc/jaeger/config.yaml
+      - ./data/jaeger:/badger/data
     command: ["--config=/etc/jaeger/config.yaml"]
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./data/prometheus:/prometheus
     ports:
-      - "9090:9090"
+      - "${PORT_PROMETHEUS}:9090"
+    user: root
+
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
-      - "3000:3000"
+      - "${PORT_GRAFANA}:3000"
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+    user: root
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "${PORT_LOKI}:3100"
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/loki-config.yaml
+      - ./data/loki:/loki
+    user: root
+
   rabbitmq:
     image: rabbitmq:management
     container_name: rabbitmq
@@ -37,20 +58,21 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+      RABBITMQ_DEFINITIONS_FILE: /etc/rabbitmq/rabbitmq_definitions.json
+    volumes:
+      - ./data/rabbitmq:/var/lib/rabbitmq
+
   postgre:
     image: postgres:18-alpine
     container_name: postgre
     restart: always
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
-      POSTGRES_DB: teste
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-
-volumes:
-  pgdata:
+      - ./data/postgres:/var/lib/postgresql/data

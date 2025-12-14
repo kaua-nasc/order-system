@@ -1,7 +1,9 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using OpenTelemetry;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -28,21 +30,34 @@ var otlpExporterEndpoint = Environment.GetEnvironmentVariable("OTLP_EXPORTER_END
     ?? throw new InvalidOperationException("OTLP_EXPORTER_ENDPOINT not set");
 
 var serviceName = builder.Environment.ApplicationName;
-
 var serviceVersion =
     Assembly.GetEntryAssembly()?
         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
         .InformationalVersion ?? throw new InvalidOperationException();
-    
-var resourceBuilder = ResourceBuilder.CreateDefault()
-    .AddService(serviceName, serviceVersion: serviceVersion, serviceInstanceId: Environment.MachineName);
 
 builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource =>
+    {
+        resource
+            .AddService(
+                serviceName: serviceName,
+                serviceVersion: serviceVersion, 
+                serviceInstanceId: Environment.MachineName);
+    })
+    .WithLogging(logging =>
+    {
+        logging
+            .AddOtlpExporter((cfg, options) =>
+            {
+                cfg.Protocol = OtlpExportProtocol.Grpc;
+                cfg.Endpoint = new Uri(otlpExporterEndpoint);
+                options.ExportProcessorType = ExportProcessorType.Batch;
+            });
+    })
     .WithMetrics(metrics =>
     {
         metrics
             .AddMeter(serviceName)
-            .SetResourceBuilder(resourceBuilder)
             .AddOtlpExporter((cfg, options) =>
             {
                 cfg.Protocol = OtlpExportProtocol.Grpc;
@@ -54,7 +69,6 @@ builder.Services.AddOpenTelemetry()
     {
         tracing
             .AddSource(serviceName)
-            .SetResourceBuilder(resourceBuilder)
             .AddNpgsql()
             .AddEntityFrameworkCoreInstrumentation()
             .AddOtlpExporter(cfg =>
