@@ -76,3 +76,37 @@ services:
       - "5432:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
+
+  vault:
+    image: hashicorp/vault:latest
+    container_name: vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: meu-token-super-secreto
+      VAULT_ADDR: "http://0.0.0.0:8200"
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - ./data/vault:/vault/file
+
+  consul:
+    image: hashicorp/consul:latest
+    container_name: consul
+    ports:
+      - "8500:8500"
+    command: agent -server -bind=0.0.0.0 -client=0.0.0.0 -bootstrap-expect=1 -ui
+    volumes:
+      - ./data/consul:/consul/data
+  # k6:
+  #   image: grafana/k6:latest
+  #   container_name: k6
+  #   volumes:
+  #     - ./k6:/scripts
+  #   command: run /scripts/load-test.js --o experimental-prometheus-rw --tag testid=order-load-test
+  #   environment:
+  #     - K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write
+  #     - K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true
+  #   depends_on:
+  #     # - order-input
+  #     - prometheus
