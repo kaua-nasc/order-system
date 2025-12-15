@@ -9,6 +9,7 @@ Accept: application/json
 
 POST {{Input_HostAddress}}/register/order
 Content-Type: application/json
+x-tenant-id: abc
 
 {
   "orderId": "65a5bbca-353b-4675-bbcc-935c3eb71704",

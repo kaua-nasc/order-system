@@ -15,8 +15,18 @@ using Order.Input.Domain.ValueObjects;
 using Order.Input.Extensions;
 using Order.Input.Filters;
 using Order.Input.Infra.MessageBroker;
+using Order.Input.Infra.MultiTenant;
+using Order.Input.Middlewares;
 using Order.Input.Observability.Metrics;
 using Order.Input.Observability.Tracing;
+using VaultSharp.Extensions.Configuration;
+using VaultSharp.V1.AuthMethods.Token;
+using Winton.Extensions.Configuration.Consul;
+
+var vaultUrl = Environment.GetEnvironmentVariable("VAULT_URL") 
+               ?? throw new InvalidOperationException("VAULT_URL not set");
+var vaultToken = Environment.GetEnvironmentVariable("VAULT_TOKEN") 
+    ?? throw new InvalidOperationException("VAULT_TOKEN not set");
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,19 +35,40 @@ builder.Services.AddOpenApi();
 builder.Services
     .AddSingleton<AppTracing>()
     .AddSingleton<AppMetrics>()
-    .AddSingleton<RabbitMqPublisher>()
+    .AddScoped<RabbitMqPublisher>()
+    .AddScoped<TenantService>()
     .AddHostedService<PublisherInitializerHostedService>()
     .AddScoped<Validator<OrderValueObject>>()
     .AddSpecificationsFromAssemblyContaining<OrderSpecification>();
-
-var otlpExporterEndpoint = Environment.GetEnvironmentVariable("OTLP_EXPORTER_ENDPOINT") 
-    ?? throw new InvalidOperationException("OTLP_EXPORTER_ENDPOINT not set");
 
 var serviceName = builder.Environment.ApplicationName;
 var serviceVersion =
     Assembly.GetEntryAssembly()?
         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
         .InformationalVersion ?? throw new InvalidOperationException();
+
+var authMethod = new TokenAuthMethodInfo(vaultToken);
+builder.Configuration.AddVaultConfiguration(
+    () => new VaultOptions(vaultUrl, authMethod),
+    "order-system",
+    "secret"
+);
+
+builder.Configuration.AddConsul(
+    "tenants",
+    options =>
+    {
+        options.ConsulConfigurationOptions = cco =>
+        {
+            cco.Address = new Uri(builder.Configuration.GetValueByKey<string>("Consul:Connection"));
+        };
+        options.Optional = true;
+        options.PollWaitTime = TimeSpan.FromSeconds(5);
+        options.ReloadOnChange = true;
+    }
+);
+
+var otlpEndpoint = builder.Configuration.GetValueByKey<string>("OpenTelemetry:Endpoint");
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource =>
@@ -54,7 +85,7 @@ builder.Services.AddOpenTelemetry()
             .AddOtlpExporter((cfg, options) =>
             {
                 cfg.Protocol = OtlpExportProtocol.Grpc;
-                cfg.Endpoint = new Uri(otlpExporterEndpoint);
+                cfg.Endpoint = new Uri(otlpEndpoint);
                 options.ExportProcessorType = ExportProcessorType.Batch;
             });
     })
@@ -65,8 +96,8 @@ builder.Services.AddOpenTelemetry()
             .AddOtlpExporter((cfg, options) =>
             {
                 cfg.Protocol = OtlpExportProtocol.Grpc;
-                cfg.Endpoint = new Uri(otlpExporterEndpoint);
-                options.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 1000;
+                cfg.Endpoint = new Uri(otlpEndpoint);
+                options.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 60000;
             });
     })
     .WithTracing(tracing =>
@@ -80,17 +111,21 @@ builder.Services.AddOpenTelemetry()
             .AddOtlpExporter(cfg =>
             {
                 cfg.Protocol = OtlpExportProtocol.Grpc;
-                cfg.Endpoint = new Uri(otlpExporterEndpoint);
+                cfg.Endpoint = new Uri(otlpEndpoint);
             });
     });
 
+var rabbitHost = builder.Configuration.GetValueByKey<string>("RabbitMQ:Host");
+var rabbitUser = builder.Configuration.GetValueByKey<string>("RabbitMQ:User");
+var rabbitPass = builder.Configuration.GetValueByKey<string>("RabbitMQ:Pass");
+builder.Services.AddRabbitMqConnection(rabbitHost, rabbitUser, rabbitPass);
+
 var app = builder.Build();
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
+if (app.Environment.IsDevelopment()) app.MapOpenApi();
 
 app.UseHttpsRedirection();
+
+app.UseMiddleware<TenantMiddleware>();
 
 app.MapPost("/register/order",
     async Task<IResult> (

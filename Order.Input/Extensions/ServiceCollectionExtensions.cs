@@ -1,5 +1,6 @@
 using System.Reflection;
 using Order.Input.Domain.Specification;
+using RabbitMQ.Client;
 
 namespace Order.Input.Extensions;
 
@@ -21,6 +22,17 @@ public static class ServiceCollectionExtensions
         public IServiceCollection AddSpecificationsFromAssemblyContaining<TMarker>()
         {
             return services.AddSpecificationsFromAssembly(typeof(TMarker).Assembly);
+        }
+
+        public IServiceCollection AddRabbitMqConnection(string host, string user, string password)
+        {
+            var rabbitConnection = new ConnectionFactory()
+            {
+                HostName = host, 
+                UserName = user, 
+                Password = password
+            };
+            return services.AddSingleton(rabbitConnection);
         }
     }
 }

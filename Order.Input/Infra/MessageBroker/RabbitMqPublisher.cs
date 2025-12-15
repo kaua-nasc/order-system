@@ -3,24 +3,17 @@ using System.Text;
 using System.Text.Json;
 using OpenTelemetry;
 using OpenTelemetry.Context.Propagation;
-using Order.Input.Domain.Commons;
+using Order.Input.Infra.MultiTenant;
 using Order.Input.Observability.Metrics;
-using Order.Input.Observability.Tracing;
 using RabbitMQ.Client;
 
 namespace Order.Input.Infra.MessageBroker;
 
-public class RabbitMqPublisher(AppTracing tracer, AppMetrics metrics, IConfiguration configuration) : IAsyncDisposable
+public class RabbitMqPublisher(
+    AppMetrics metrics,
+    ConnectionFactory factory,
+    TenantService tenantService) : IAsyncDisposable
 {
-    private readonly ConnectionFactory _factory = new()
-    {
-        HostName = configuration["RabbitMQ:Host"] 
-            ?? throw new ArgumentNullException($"{nameof(RabbitMQ)}:Host"), 
-        UserName = configuration["RabbitMQ:User"] 
-            ?? throw new ArgumentNullException($"{nameof(RabbitMQ)}:User"), 
-        Password = configuration["RabbitMQ:Pass"] 
-            ?? throw new ArgumentNullException($"{nameof(RabbitMQ)}:Pass")
-    };
     private IConnection? _connection;   
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
 
@@ -29,11 +22,11 @@ public class RabbitMqPublisher(AppTracing tracer, AppMetrics metrics, IConfigura
         if (_connection is not null) return;
         
         await _connectionLock.WaitAsync();
-        _connection = await _factory.CreateConnectionAsync();
+        _connection = await factory.CreateConnectionAsync();
         try
         {
             if (_connection is not null) return;
-            _connection = await _factory.CreateConnectionAsync();
+            _connection = await factory.CreateConnectionAsync();
         }
         finally
         {
@@ -41,31 +34,36 @@ public class RabbitMqPublisher(AppTracing tracer, AppMetrics metrics, IConfigura
         }
     }
     
-    public async Task PublishAsync<T>(T message) where T : IMessage
+    public async Task PublishAsync<T>(T message)
     {
         if (_connection is null) await InitializeAsync();
         await using var channel = await _connection!.CreateChannelAsync();
 
-        using var activity = tracer.StartActivity("RabbitMQ Publish", ActivityKind.Producer);
+
+        var tenantId = tenantService.TenantId;
+        if (tenantId is null) throw new InvalidOperationException($"nameof(tenantId) can't be null.");
         
         var properties = new BasicProperties
         {
-            Headers = new Dictionary<string, object>(),
+            Headers = new Dictionary<string, object?>
+            {
+                {"tenant-key", tenantId},
+            },
             Persistent = true
         };
         
+        var activity = Activity.Current;
         if (activity is not null)
         {
-            var propagator = Propagators.DefaultTextMapPropagator;
-            var context = new PropagationContext(activity.Context, Baggage.Current);
-            propagator.Inject(
-                context, properties.Headers, 
+            Propagators.DefaultTextMapPropagator.Inject(
+                new PropagationContext(activity.Context, Baggage.Current),
+                properties.Headers,
                 (headers, key, value) => headers[key] = value);
         }
         
         await channel.BasicPublishAsync(
             exchange: string.Empty,
-            routingKey: "test",
+            routingKey: "orders",
             basicProperties: properties,
             mandatory: false,
             body: Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message))
