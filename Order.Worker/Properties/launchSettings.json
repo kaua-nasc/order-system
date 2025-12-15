@@ -6,7 +6,8 @@
       "dotnetRunMessages": true,
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development",
-        "OTLP_EXPORTER_ENDPOINT": "http://localhost:4317"
+        "VAULT_URL": "http://localhost:8200",
+        "VAULT_TOKEN": "meu-token-super-secreto"
       }
     }
   }
