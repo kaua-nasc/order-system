@@ -3,7 +3,20 @@ using System.Reflection;
 
 namespace Order.Worker.Observability.Metrics;
 
-public class AppMetrics : IDisposable
+public interface IAppMetrics
+{
+    void IncrementMessagesConsumed();
+    void IncrementDuplicateMessages();
+    void IncrementOrdersProcessed();
+    void IncrementProcessingErrors();
+    void RecordOrderValue(decimal amount);
+    void RecordProcessingDuration(TimeSpan duration);
+    void IncrementActiveProcessing();
+    void DecrementActiveProcessing();
+    void RecordOrderByValueRange(decimal amount);
+}
+
+public class AppMetrics : IAppMetrics, IDisposable
 {
     private readonly Meter _meter;
     

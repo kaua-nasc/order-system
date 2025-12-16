@@ -16,7 +16,7 @@ namespace Order.Worker.Infra.MessageBroker.Consumers;
 public class RabbitMqConsumer(
     IServiceProvider serviceProvider,
     ILogger<RabbitMqConsumer> logger,
-    AppTracing tracer,
+    IAppTracing tracer,
     RabbitMqOptions options) : BackgroundService
 {
     private readonly ConnectionFactory _factory = new()
@@ -24,7 +24,7 @@ public class RabbitMqConsumer(
         HostName = options.Hostname,
         UserName = options.Username,
         Password = options.Password,
-        AutomaticRecoveryEnabled = true,
+        AutomaticRecoveryEnabled = true
     };
 
     private IConnection? _connection;

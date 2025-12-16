@@ -8,7 +8,7 @@ using Order.Worker.Observability.Tracing;
 
 namespace Order.Worker.Domain;
 
-public class MessageProcessor(ILogger<MessageProcessor> logger, AppTracing tracer, AppMetrics metrics, AppDbContext context)
+public class MessageProcessor(ILogger<MessageProcessor> logger, IAppTracing tracer, IAppMetrics metrics, AppDbContext context)
 {
     public async Task Process(OrderMessage message)
     {
@@ -18,13 +18,13 @@ public class MessageProcessor(ILogger<MessageProcessor> logger, AppTracing trace
         try
         {
             metrics.IncrementMessagesConsumed();
-            using var activity = tracer.Source.StartActivity(nameof(MessageProcessor), ActivityKind.Consumer);
+            using var activity = tracer.StartActivity(nameof(MessageProcessor), ActivityKind.Consumer);
 
             activity?.SetTag("message.type", nameof(OrderMessage));
             activity?.SetTag("processing.step", "start");
             activity?.SetTag("message.content", message);
             activity?.SetTag("thread.id", Environment.CurrentManagedThreadId);
-
+            
             var exists = await context.OrdersProcessed
                 .AnyAsync(order => order.OrderId == message.OrderId);
 

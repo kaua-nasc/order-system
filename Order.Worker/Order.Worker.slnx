@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="../Order.Worker.Tests.Integration/Order.Worker.Tests.Integration.csproj" />
   <Project Path="Order.Worker.csproj" />
 </Solution>

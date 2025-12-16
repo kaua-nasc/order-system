@@ -53,8 +53,8 @@ builder.Configuration.AddConsul(
 );
 
 builder.Services
-    .AddSingleton<AppTracing>()
-    .AddSingleton<AppMetrics>()
+    .AddSingleton<IAppTracing, AppTracing>()
+    .AddSingleton<IAppMetrics, AppMetrics>()
     .AddScoped<MessageProcessor>();
 
 builder.Services.AddScoped<TenantService>();
