@@ -12,10 +12,12 @@ namespace Order.Input.Infra.MessageBroker;
 public class RabbitMqPublisher(
     AppMetrics metrics,
     ConnectionFactory factory,
-    TenantService tenantService) : IAsyncDisposable
+    TenantService tenantService,
+    IConfiguration configuration) : IAsyncDisposable
 {
     private IConnection? _connection;   
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
+    private readonly string _queueName = configuration["rabbitmq:queue_name"] ?? "orders";
 
     public async Task InitializeAsync()
     {
@@ -61,15 +63,24 @@ public class RabbitMqPublisher(
                 (headers, key, value) => headers[key] = value);
         }
         
-        await channel.BasicPublishAsync(
-            exchange: string.Empty,
-            routingKey: "orders",
-            basicProperties: properties,
-            mandatory: false,
-            body: Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message))
-        );
-        
-        metrics.IncrementPublishedMessages();
+        try
+        {
+            await channel.BasicPublishAsync(
+                exchange: string.Empty,
+                routingKey: _queueName,
+                basicProperties: properties,
+                mandatory: false,
+                body: Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message))
+            );
+            
+            metrics.IncrementPublishedMessages();
+        }
+        catch (Exception ex)
+        {
+            activity?.AddException(ex);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            throw;
+        }
     }
 
     public async ValueTask DisposeAsync()

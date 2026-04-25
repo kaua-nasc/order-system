@@ -1,3 +1,9 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
 namespace Order.Input.Infra.MessageBroker;
 
 public class PublisherInitializerHostedService(IServiceProvider serviceProvider) : IHostedService

@@ -1,11 +1,10 @@
 using Order.Input.Domain.Specification;
 using Order.Input.Domain.Specification.Services;
-using Order.Input.Domain.ValueObjects;
 
 namespace Order.Input.Filters;
 
 public class ValidationFilter<T>(Validator<T> validator, IServiceProvider serviceProvider) : IEndpointFilter
-    where T : struct, IValueObject
+    where T : class
 {
     public async ValueTask<object?> InvokeAsync(
         EndpointFilterInvocationContext context,

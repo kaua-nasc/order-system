@@ -9,16 +9,8 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "VAULT_URL": "http://localhost:8200",
-        "VAULT_TOKEN": "meu-token-super-secreto"
-      }
-    },
-    "https": {
-      "commandName": "Project",
-      "dotnetRunMessages": true,
-      "launchBrowser": false,
-      "applicationUrl": "https://localhost:7017;http://localhost:5015",
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "VAULT_TOKEN": "meu-token-super-secreto",
+        "VAULT_PATH": "dev/order-system/order-input"
       }
     }
   }

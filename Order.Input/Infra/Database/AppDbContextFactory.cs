@@ -1,11 +1,11 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Order.Worker.Infra.MultiTenant;
+using Order.Input.Infra.MultiTenant;
 using VaultSharp.Extensions.Configuration;
 using VaultSharp.V1.AuthMethods.Token;
 
-namespace Order.Worker.Infra.Database;
+namespace Order.Input.Infra.Database;
 
 public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
@@ -29,20 +29,21 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
                 {
                     using var file = File.OpenRead(launchSettingsPath);
                     using var json = JsonDocument.Parse(file);
+                    
+                    // Busca o primeiro profile que tiver environmentVariables
                     var profiles = json.RootElement.GetProperty("profiles");
                     foreach (var profile in profiles.EnumerateObject())
                     {
-                        if (profile.Value.TryGetProperty("environmentVariables", out var envVars))
-                        {
-                            if (string.IsNullOrEmpty(vaultUrl) && envVars.TryGetProperty("VAULT_URL", out var vUrl))
-                                vaultUrl = vUrl.GetString();
-                            if (string.IsNullOrEmpty(vaultToken) && envVars.TryGetProperty("VAULT_TOKEN", out var vToken))
-                                vaultToken = vToken.GetString();
-                        }
+                        if (!profile.Value.TryGetProperty("environmentVariables", out var envVars)) continue;
+                        if (string.IsNullOrEmpty(vaultUrl) && envVars.TryGetProperty("VAULT_URL", out var vUrl))
+                            vaultUrl = vUrl.GetString();
+                                
+                        if (string.IsNullOrEmpty(vaultToken) && envVars.TryGetProperty("VAULT_TOKEN", out var vToken))
+                            vaultToken = vToken.GetString();
                     }
                 }
             }
-            catch { }
+            catch { /* Ignora erros de leitura de config em tempo de design */ }
         }
 
         if (!string.IsNullOrEmpty(vaultUrl) && !string.IsNullOrEmpty(vaultToken))
@@ -77,7 +78,7 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
         return new AppDbContext(optionsBuilder.Options, new DesignTimeConnectionProvider());
     }
 
-    private class DesignTimeConnectionProvider : ITenantConnectionProvider
+    private class DesignTimeConnectionProvider : ITenantDatabaseProvider
     {
         public string GetConnectionString() => ""; 
     }

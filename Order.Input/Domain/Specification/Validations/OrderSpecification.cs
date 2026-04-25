@@ -1,11 +1,11 @@
+using Order.Input.Domain.Entities;
 using Order.Input.Domain.Specification.Models;
-using Order.Input.Domain.ValueObjects;
 
 namespace Order.Input.Domain.Specification.Validations;
 
-public class OrderSpecification : BaseSpecification<OrderValueObject>
+public class OrderSpecification : BaseSpecification<OrderEntity>
 {
-    protected override void AddErrors(OrderValueObject entity, SpecificationResult result)
+    protected override void AddErrors(OrderEntity entity, SpecificationResult result)
     {
         if (entity.TotalAmount < 0)
         {
@@ -17,7 +17,7 @@ public class OrderSpecification : BaseSpecification<OrderValueObject>
             result.AddError("", "", nameof(entity.CreatedAt));
         }
 
-        if (entity.Items.Length == 0)
+        if (entity.Items.Count == 0)
         {
             result.AddError("", "", nameof(entity.Items));
         }
