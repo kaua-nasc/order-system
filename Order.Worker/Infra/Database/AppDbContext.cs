@@ -1,17 +1,36 @@
 using Microsoft.EntityFrameworkCore;
-using Order.Worker.Domain.ValueObjects;
+using Order.Worker.Domain.Entities;
+using Order.Worker.Domain.Enums;
 using Order.Worker.Infra.MultiTenant;
 
 namespace Order.Worker.Infra.Database;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantConnectionProvider connectionProvider) : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantDatabaseProvider connectionProvider) : DbContext(options)
 {
-    public DbSet<OrderProcessedValueObject> OrdersProcessed => Set<OrderProcessedValueObject>();
+    public DbSet<OrderEntity> Orders => Set<OrderEntity>();
+    public DbSet<OrderItemEntity> OrderItems => Set<OrderItemEntity>();
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (optionsBuilder.IsConfigured) return;
         
         var connectionString = connectionProvider.GetConnectionString();
         optionsBuilder.UseNpgsql(connectionString);
+    }
+    
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<OrderEntity>()
+            .HasMany(o => o.Items)
+            .WithOne()
+            .HasForeignKey(i => i.OrderId);
+
+        modelBuilder.Entity<OrderEntity>()
+            .Property(o => o.Status)
+            .HasConversion(
+                status => status.Value,
+                value => OrderStatus.FromString(value));
+            
+        base.OnModelCreating(modelBuilder);
     }
 }

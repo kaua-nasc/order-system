@@ -18,6 +18,8 @@ using VaultSharp.Extensions.Configuration;
 using VaultSharp.V1.AuthMethods.Token;
 using Winton.Extensions.Configuration.Consul;
 
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var vaultUrl = Environment.GetEnvironmentVariable("VAULT_URL") 
     ?? throw new InvalidOperationException("VAULT_URL not set");
 var vaultToken = Environment.GetEnvironmentVariable("VAULT_TOKEN") 
@@ -58,13 +60,13 @@ builder.Services
     .AddScoped<MessageProcessor>();
 
 builder.Services.AddScoped<TenantService>();
-builder.Services.AddScoped<ITenantConnectionProvider,TenantConnectionProvider>();
+builder.Services.AddScoped<ITenantDatabaseProvider,TenantDatabaseProvider>();
 
 builder.Services.AddHostedService<RabbitMqConsumer>();
 
 builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
 {
-    var connectionProvider = serviceProvider.GetRequiredService<ITenantConnectionProvider>();
+    var connectionProvider = serviceProvider.GetRequiredService<ITenantDatabaseProvider>();
     
     options.UseNpgsql(connectionProvider.GetConnectionString());
 });

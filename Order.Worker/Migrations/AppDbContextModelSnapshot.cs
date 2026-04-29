@@ -22,27 +22,67 @@ namespace Order.Worker.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Order.Worker.Domain.ValueObjects.OrderProcessedValueObject", b =>
+            modelBuilder.Entity("Order.Worker.Domain.Entities.OrderEntity", b =>
+                {
+                    b.Property<Guid>("OrderId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("LastUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("OrderId");
+
+                    b.ToTable("orders");
+                });
+
+            modelBuilder.Entity("Order.Worker.Domain.Entities.OrderItemEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid>("OrderId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("ProcessedAt")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
 
-                    b.Property<decimal>("TotalAmount")
-                        .HasColumnType("numeric");
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.ToTable("orders_processed");
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("order_items");
+                });
+
+            modelBuilder.Entity("Order.Worker.Domain.Entities.OrderItemEntity", b =>
+                {
+                    b.HasOne("Order.Worker.Domain.Entities.OrderEntity", null)
+                        .WithMany("Items")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Order.Worker.Domain.Entities.OrderEntity", b =>
+                {
+                    b.Navigation("Items");
                 });
 #pragma warning restore 612, 618
         }

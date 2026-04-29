@@ -74,10 +74,10 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
         optionsBuilder.UseNpgsql(connectionString);
 
-        return new AppDbContext(optionsBuilder.Options, new DesignTimeConnectionProvider());
+        return new AppDbContext(optionsBuilder.Options, new DesignTimeDatabaseProvider());
     }
 
-    private class DesignTimeConnectionProvider : ITenantConnectionProvider
+    private class DesignTimeDatabaseProvider : ITenantDatabaseProvider
     {
         public string GetConnectionString() => ""; 
     }

@@ -8,6 +8,7 @@ using Order.Worker.Domain.Messages;
 using Order.Worker.Infra.MessageBroker.Models;
 using Order.Worker.Infra.MultiTenant;
 using Order.Worker.Observability.Tracing;
+using Polly;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -27,6 +28,19 @@ public class RabbitMqConsumer(
         AutomaticRecoveryEnabled = true
     };
 
+    private readonly IAsyncPolicy _resiliencePolicy = Policy.WrapAsync(
+        Policy.Handle<Exception>()
+            .WaitAndRetryForeverAsync(
+                retryAttempt => TimeSpan.FromSeconds(Math.Min(Math.Pow(2, retryAttempt), 30)),
+                (ex, time) => logger.LogWarning(ex, "Falha na conexão com RabbitMQ. Retentando em {Time}s...", time.TotalSeconds)),
+        Policy.Handle<Exception>()
+            .CircuitBreakerAsync(
+                exceptionsAllowedBeforeBreaking: 3,
+                durationOfBreak: TimeSpan.FromSeconds(30),
+                onBreak: (ex, time) => logger.LogCritical(ex, "CIRCUITO ABERTO! RabbitMQ inacessível. Pausando tentativas por {Time}s", time.TotalSeconds),
+                onReset: () => logger.LogInformation("Circuito fechado. Tentando reconectar..."))
+    );
+
     private IConnection? _connection;
     private IChannel? _channel;
 
@@ -36,12 +50,16 @@ public class RabbitMqConsumer(
         {
             try
             {
-                await InitializeRabbitMq(stoppingToken);
-                await Task.Delay(Timeout.Infinite, stoppingToken);
+                await _resiliencePolicy.ExecuteAsync(async () =>
+                {
+                    await InitializeRabbitMq(stoppingToken);
+                    await Task.Delay(Timeout.Infinite, stoppingToken);
+                });
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogError(ex, "Failed to start RabbitMQ Consumer. Retrying in 5s...");
+                // Se o Circuit Breaker lançar BrokenCircuitException, ele cai aqui
+                // O loop while garante que após o tempo de break, ele tente novamente via Política
                 await Task.Delay(5000, stoppingToken);
             }
         }

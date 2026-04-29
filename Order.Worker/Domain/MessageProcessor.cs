@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using Microsoft.EntityFrameworkCore;
+using Order.Worker.Domain.Entities;
+using Order.Worker.Domain.Exceptions;
 using Order.Worker.Domain.Messages;
-using Order.Worker.Domain.ValueObjects;
 using Order.Worker.Infra.Database;
 using Order.Worker.Observability.Metrics;
 using Order.Worker.Observability.Tracing;
@@ -14,10 +14,10 @@ public class MessageProcessor(ILogger<MessageProcessor> logger, IAppTracing trac
     {
         var stopwatch = Stopwatch.StartNew();
         metrics.IncrementActiveProcessing();
+        OrderEntity? order = null;
 
         try
         {
-            metrics.IncrementMessagesConsumed();
             using var activity = tracer.StartActivity(nameof(MessageProcessor), ActivityKind.Consumer);
 
             activity?.SetTag("message.type", nameof(OrderMessage));
@@ -25,28 +25,47 @@ public class MessageProcessor(ILogger<MessageProcessor> logger, IAppTracing trac
             activity?.SetTag("message.content", message);
             activity?.SetTag("thread.id", Environment.CurrentManagedThreadId);
             
-            var exists = await context.OrdersProcessed
-                .AnyAsync(order => order.OrderId == message.OrderId);
+            order = await context.Orders
+                .FindAsync(message.OrderId);
 
-            if (exists)
+            if (order is null)
             {
-                metrics.IncrementDuplicateMessages();
-                logger.LogDebug("Duplicate order {OrderId}", message.OrderId);
-                return;
+                throw new NotFoundException($"order with id {message.OrderId} not found");
             }
-
-            var orderProcessed = new OrderProcessedValueObject(message);
-            await context.OrdersProcessed.AddAsync(orderProcessed);
+            
+            order.MarkAsProcessed();
+            
             await context.SaveChangesAsync();
-
+            
             metrics.IncrementOrdersProcessed();
-            metrics.RecordOrderValue(message.TotalAmount);
-            metrics.RecordOrderByValueRange(message.TotalAmount);
+            metrics.RecordOrderValue(order.TotalAmount);
+            metrics.RecordOrderByValueRange(order.TotalAmount);
 
             logger.LogInformation("Order {OrderId} processed", message.OrderId);
+            metrics.IncrementMessagesConsumed();
+        }
+        catch (NotFoundException)
+        {
+            metrics.IncrementProcessingErrors();
+            logger.LogError("Order {OrderId} not found", message.OrderId);
+            throw;
         }
         catch (Exception ex)
         {
+            if (order is not null)
+            {
+                try
+                {
+                    order.MarkAsFailed();
+                    await context.SaveChangesAsync();
+                    logger.LogWarning("Order {OrderId} marked as failed due to an error.", message.OrderId);
+                }
+                catch (Exception dbEx)
+                {
+                    logger.LogError(dbEx, "Failed to update order {OrderId} status to Error", message.OrderId);
+                }
+            }
+
             metrics.IncrementProcessingErrors();
             logger.LogError(ex, "Error while processing order {OrderId}", message.OrderId);
             throw;

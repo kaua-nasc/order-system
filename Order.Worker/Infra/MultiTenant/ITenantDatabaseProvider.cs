@@ -1,6 +1,6 @@
 namespace Order.Worker.Infra.MultiTenant;
 
-public interface ITenantConnectionProvider
+public interface ITenantDatabaseProvider
 {
     string GetConnectionString();
 }

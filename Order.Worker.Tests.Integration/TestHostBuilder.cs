@@ -31,8 +31,8 @@ public static class TestHostBuilder
                     options.UseNpgsql(postgres.GetConnectionString());
                 });
                 
-                services.AddSingleton<ITenantConnectionProvider>(
-                    new StaticTenantConnectionProvider(
+                services.AddSingleton<ITenantDatabaseProvider>(
+                    new StaticTenantDatabaseProvider(
                         postgres.GetConnectionString()
                     )
                 );

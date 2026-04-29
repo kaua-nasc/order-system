@@ -26,6 +26,8 @@ using VaultSharp.Extensions.Configuration;
 using VaultSharp.V1.AuthMethods.Token;
 using Winton.Extensions.Configuration.Consul;
 
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. Carrega variáveis de ambiente básicas

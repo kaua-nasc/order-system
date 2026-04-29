@@ -40,7 +40,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Domain\Commons\" />
       <Folder Include="Observability\" />
     </ItemGroup>
 

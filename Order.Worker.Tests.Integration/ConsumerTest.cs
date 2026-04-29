@@ -1,62 +1,58 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Order.Worker.Domain;
-using Order.Worker.Domain.Messages;
+using Order.Worker.Domain.Entities;
 using Order.Worker.Infra.Database;
 using Order.Worker.Tests.Integration.Builders.Message;
-using Order.Worker.Tests.Integration.Builders.ValueObjects;
 using Order.Worker.Tests.Integration.Fixtures;
+using Order.Worker.Domain.Exceptions;
+using Order.Worker.Domain.Enums;
 
 namespace Order.Worker.Tests.Integration;
 
 public class ConsumerTest(StackFixture fixture) : IClassFixture<StackFixture>
 {
     [Fact]
-    public async Task Should_Process_Message_And_Save_To_Database_A_Manual_Coupon()
+    public async Task Should_Process_Message_Successfully_And_Update_Status_When_Order_Exists()
     {
+        // Arrange
+        var orderId = Guid.NewGuid();
         var message = new OrderMessageBuilder()
-            .WithItems([new OrderItemMessage(Guid.NewGuid(), 10)])
+            .WithOrderId(orderId)
             .Build();
+            
         using var host = await TestHostBuilder.CreateAsync(fixture.Postgres);
         await using var scope = host.Services.CreateAsyncScope();
 
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var order = new OrderEntity(Guid.NewGuid(), DateTime.UtcNow, 100) { OrderId = orderId };
+        await db.Orders.AddAsync(order);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
         var processor = scope.ServiceProvider.GetRequiredService<MessageProcessor>();
         
+        // Act
         await processor.Process(message);
 
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        
-        var quantity = await db.OrdersProcessed
-            .CountAsync(x => x.OrderId == message.OrderId);
-        
-        Assert.Equal(1, quantity);
+        // Assert
+        var updatedOrder = await db.Orders.FindAsync(orderId);
+        Assert.NotNull(updatedOrder);
+        Assert.Equal(OrderStatus.Completed, updatedOrder.Status);
     }
     
     [Fact]
-    public async Task Should_Process_Message_And_Ignore_When_Order_Already_Processed()
+    public async Task Should_Throw_NotFoundException_When_Order_Does_Not_Exist()
     {
+        // Arrange
         var message = new OrderMessageBuilder()
-            .WithItems([new OrderItemMessage(Guid.NewGuid(), 10)])
             .Build();
-        var order = new OrderProcessedValueObjectBuilder()
-            .FromMessage(message)
-            .Build();
+            
         using var host = await TestHostBuilder.CreateAsync(fixture.Postgres);
         await using var scope = host.Services.CreateAsyncScope();
 
         var processor = scope.ServiceProvider.GetRequiredService<MessageProcessor>();
         
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        
-        await db.OrdersProcessed.AddAsync(order);
-
-        await db.SaveChangesAsync();
-        
-        await processor.Process(message);
-
-        var quantity = await db.OrdersProcessed
-            .CountAsync(x => x.OrderId == message.OrderId);
-        
-        Assert.Equal(1, quantity);
+        // Act & Assert
+        await Assert.ThrowsAsync<NotFoundException>(() => processor.Process(message));
     }
 }
