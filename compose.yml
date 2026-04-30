@@ -5,9 +5,11 @@ services:
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
     ports:
-      - "${PORT_OTEL_GRPC}:4317"
-      - "${PORT_OTEL_HTTP}:4318"
-      - "8889:8889"
+      - "${PORT_OTEL_GRPC:-4317}:4317"
+      - "${PORT_OTEL_HTTP:-4318}:4318"
+      - "8890:8889"
+    networks:
+      - default
 
   jaeger:
     image: jaegertracing/jaeger:latest
@@ -20,6 +22,8 @@ services:
       - ./jaeger-config.yaml:/etc/jaeger/config.yaml
       - ./data/jaeger:/badger/data
     command: ["--config=/etc/jaeger/config.yaml"]
+    networks:
+      - default
 
   prometheus:
     image: prom/prometheus:latest
@@ -28,28 +32,34 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./data/prometheus:/prometheus
     ports:
-      - "${PORT_PROMETHEUS}:9090"
+      - "${PORT_PROMETHEUS:-9090}:9090"
     user: root
+    networks:
+      - default
 
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
-      - "${PORT_GRAFANA}:3000"
+      - "${PORT_GRAFANA:-3000}:3000"
     volumes:
       - ./data/grafana:/var/lib/grafana
     user: root
+    networks:
+      - default
 
   loki:
     image: grafana/loki:latest
     container_name: loki
     ports:
-      - "${PORT_LOKI}:3100"
+      - "${PORT_LOKI:-3100}:3100"
     command: -config.file=/etc/loki/loki-config.yaml
     volumes:
       - ./loki-config.yaml:/etc/loki/loki-config.yaml
       - ./data/loki:/loki
     user: root
+    networks:
+      - default
 
   rabbitmq:
     image: rabbitmq:management
@@ -58,24 +68,28 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
       RABBITMQ_DEFINITIONS_FILE: /etc/rabbitmq/rabbitmq_definitions.json
     volumes:
       - ./data/rabbitmq:/var/lib/rabbitmq
+    networks:
+      - default
 
   postgre:
     image: postgres:18-alpine
     container_name: postgre
     restart: always
     environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-orders}
     ports:
       - "5432:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - default
 
   vault:
     image: hashicorp/vault:latest
@@ -83,12 +97,14 @@ services:
     ports:
       - "8200:8200"
     environment:
-      VAULT_DEV_ROOT_TOKEN_ID: meu-token-super-secreto
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-meu-token-super-secreto}
       VAULT_ADDR: "http://0.0.0.0:8200"
     cap_add:
       - IPC_LOCK
     volumes:
       - ./data/vault:/vault/file
+    networks:
+      - default
 
   consul:
     image: hashicorp/consul:latest
@@ -98,15 +114,9 @@ services:
     command: agent -server -bind=0.0.0.0 -client=0.0.0.0 -bootstrap-expect=1 -ui
     volumes:
       - ./data/consul:/consul/data
-  # k6:
-  #   image: grafana/k6:latest
-  #   container_name: k6
-  #   volumes:
-  #     - ./k6:/scripts
-  #   command: run /scripts/load-test.js --o experimental-prometheus-rw --tag testid=order-load-test
-  #   environment:
-  #     - K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write
-  #     - K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true
-  #   depends_on:
-  #     # - order-input
-  #     - prometheus
+    networks:
+      - default
+
+networks:
+  default:
+    name: order-system_default
