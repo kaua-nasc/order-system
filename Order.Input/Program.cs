@@ -116,12 +116,13 @@ app.UseHttpsRedirection();
 app.UseMiddleware<TenantMiddleware>();
 
 app.MapPost("/register/order",
-    async Task<IResult> (ILogger<Program> logger, AppTracing tracer, AppMetrics metrics, RabbitMqPublisher publisher, AppDbContext context, [FromBody] OrderEntity order) =>
+    async Task<IResult> (ILogger<Program> logger, AppTracing tracer, AppMetrics metrics, RabbitMqPublisher publisher, AppDbContext context, TenantService tenantService, [FromBody] OrderEntity order) =>
     {
         using var act = tracer.StartActivity("RegisterOrder", ActivityKind.Producer);
+        var tenantId = tenantService.TenantId ?? "unknown";
         try
         {
-            metrics.IncrementOrderCounter();
+            metrics.IncrementOrderCounter(tenantId);
             var exists = await context.Orders.FindAsync(order.OrderId);
             if (exists is not null)
             {
@@ -139,7 +140,7 @@ app.MapPost("/register/order",
         {
             act?.AddException(ex);
             act?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            metrics.IncrementOrderErrorCounter();
+            metrics.IncrementOrderErrorCounter(tenantId);
 
             logger.LogError(ex, "Error while processing order {OrderId}", order.OrderId);
             return Results.Problem(title: "Order processing failed", statusCode: 500);

@@ -73,7 +73,7 @@ public class RabbitMqPublisher(
                 body: Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message))
             );
             
-            metrics.IncrementPublishedMessages();
+            metrics.IncrementPublishedMessages(tenantId);
         }
         catch (Exception ex)
         {

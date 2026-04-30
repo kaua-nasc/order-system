@@ -3,17 +3,19 @@ using Order.Worker.Domain.Entities;
 using Order.Worker.Domain.Exceptions;
 using Order.Worker.Domain.Messages;
 using Order.Worker.Infra.Database;
+using Order.Worker.Infra.MultiTenant;
 using Order.Worker.Observability.Metrics;
 using Order.Worker.Observability.Tracing;
 
 namespace Order.Worker.Domain;
 
-public class MessageProcessor(ILogger<MessageProcessor> logger, IAppTracing tracer, IAppMetrics metrics, AppDbContext context)
+public class MessageProcessor(ILogger<MessageProcessor> logger, IAppTracing tracer, IAppMetrics metrics, AppDbContext context, TenantService tenantService)
 {
     public async Task Process(OrderMessage message)
     {
+        var tenantId = tenantService.TenantId ?? "unknown";
         var stopwatch = Stopwatch.StartNew();
-        metrics.IncrementActiveProcessing();
+        metrics.IncrementActiveProcessing(tenantId);
         OrderEntity? order = null;
 
         try
@@ -37,16 +39,16 @@ public class MessageProcessor(ILogger<MessageProcessor> logger, IAppTracing trac
             
             await context.SaveChangesAsync();
             
-            metrics.IncrementOrdersProcessed();
-            metrics.RecordOrderValue(order.TotalAmount);
-            metrics.RecordOrderByValueRange(order.TotalAmount);
+            metrics.IncrementOrdersProcessed(tenantId);
+            metrics.RecordOrderValue(order.TotalAmount, tenantId);
+            metrics.RecordOrderByValueRange(order.TotalAmount, tenantId);
 
             logger.LogInformation("Order {OrderId} processed", message.OrderId);
-            metrics.IncrementMessagesConsumed();
+            metrics.IncrementMessagesConsumed(tenantId);
         }
         catch (NotFoundException)
         {
-            metrics.IncrementProcessingErrors();
+            metrics.IncrementProcessingErrors(tenantId);
             logger.LogError("Order {OrderId} not found", message.OrderId);
             throw;
         }
@@ -66,15 +68,15 @@ public class MessageProcessor(ILogger<MessageProcessor> logger, IAppTracing trac
                 }
             }
 
-            metrics.IncrementProcessingErrors();
+            metrics.IncrementProcessingErrors(tenantId);
             logger.LogError(ex, "Error while processing order {OrderId}", message.OrderId);
             throw;
         }
         finally
         {
-            metrics.DecrementActiveProcessing();
+            metrics.DecrementActiveProcessing(tenantId);
             stopwatch.Stop();
-            metrics.RecordProcessingDuration(stopwatch.Elapsed);
+            metrics.RecordProcessingDuration(stopwatch.Elapsed, tenantId);
         }
     }
 }

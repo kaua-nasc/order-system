@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Reflection;
 
@@ -27,24 +28,24 @@ public class AppMetrics : IDisposable
         _processingTime = _meter.CreateHistogram<double>("processing_time");
     }
 
-    public void IncrementPublishedMessages()
+    public void IncrementPublishedMessages(string tenantId)
     {
-        _messagePublished.Add(1);
+        _messagePublished.Add(1, new TagList { { "tenant_id", tenantId } });
     }
 
-    public void IncrementOrderCounter()
+    public void IncrementOrderCounter(string tenantId)
     {
-        _orderCounter.Add(1);
+        _orderCounter.Add(1, new TagList { { "tenant_id", tenantId } });
     }
     
-    public void IncrementOrderErrorCounter()
+    public void IncrementOrderErrorCounter(string tenantId)
     {
-        _orderErrorCounter.Add(1);
+        _orderErrorCounter.Add(1, new TagList { { "tenant_id", tenantId } });
     }
 
-    public void AddProcessingTime(double ms)
+    public void AddProcessingTime(double ms, string tenantId)
     {
-        _processingTime.Record(ms);
+        _processingTime.Record(ms, new TagList { { "tenant_id", tenantId } });
     }
     
     public void Dispose()

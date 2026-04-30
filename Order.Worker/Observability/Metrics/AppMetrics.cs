@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Reflection;
 
@@ -5,15 +6,15 @@ namespace Order.Worker.Observability.Metrics;
 
 public interface IAppMetrics
 {
-    void IncrementMessagesConsumed();
-    void IncrementDuplicateMessages();
-    void IncrementOrdersProcessed();
-    void IncrementProcessingErrors();
-    void RecordOrderValue(decimal amount);
-    void RecordProcessingDuration(TimeSpan duration);
-    void IncrementActiveProcessing();
-    void DecrementActiveProcessing();
-    void RecordOrderByValueRange(decimal amount);
+    void IncrementMessagesConsumed(string tenantId);
+    void IncrementDuplicateMessages(string tenantId);
+    void IncrementOrdersProcessed(string tenantId);
+    void IncrementProcessingErrors(string tenantId);
+    void RecordOrderValue(decimal amount, string tenantId);
+    void RecordProcessingDuration(TimeSpan duration, string tenantId);
+    void IncrementActiveProcessing(string tenantId);
+    void DecrementActiveProcessing(string tenantId);
+    void RecordOrderByValueRange(decimal amount, string tenantId);
 }
 
 public class AppMetrics : IAppMetrics, IDisposable
@@ -113,52 +114,52 @@ public class AppMetrics : IAppMetrics, IDisposable
     }
     
     // Métodos públicos
-    public void IncrementMessagesConsumed() => _messagesConsumedCounter.Add(1);
-    public void IncrementDuplicateMessages() => _duplicateMessagesCounter.Add(1);
-    public void IncrementOrdersProcessed() => _ordersProcessedCounter.Add(1);
-    public void IncrementProcessingErrors() => _processingErrorsCounter.Add(1);
+    public void IncrementMessagesConsumed(string tenantId) => _messagesConsumedCounter.Add(1, new TagList { { "tenant_id", tenantId } });
+    public void IncrementDuplicateMessages(string tenantId) => _duplicateMessagesCounter.Add(1, new TagList { { "tenant_id", tenantId } });
+    public void IncrementOrdersProcessed(string tenantId) => _ordersProcessedCounter.Add(1, new TagList { { "tenant_id", tenantId } });
+    public void IncrementProcessingErrors(string tenantId) => _processingErrorsCounter.Add(1, new TagList { { "tenant_id", tenantId } });
     
-    public void RecordOrderValue(decimal amount)
+    public void RecordOrderValue(decimal amount, string tenantId)
     {
-        _totalRevenueCounter.Add(amount);
-        _orderValueHistogram.Record(amount);
+        _totalRevenueCounter.Add(amount, new TagList { { "tenant_id", tenantId } });
+        _orderValueHistogram.Record(amount, new TagList { { "tenant_id", tenantId } });
     }
     
-    public void RecordProcessingDuration(double seconds)
+    public void RecordProcessingDuration(TimeSpan duration, string tenantId)
     {
-        _processingDurationHistogram.Record(seconds);
+        _processingDurationHistogram.Record(duration.TotalSeconds, new TagList { { "tenant_id", tenantId } });
     }
     
-    public void RecordProcessingDuration(TimeSpan duration)
-    {
-        _processingDurationHistogram.Record(duration.TotalSeconds);
-    }
-    
-    public void IncrementActiveProcessing()
+    public void IncrementActiveProcessing(string tenantId)
     {
         Interlocked.Increment(ref _activeProcessingCount);
+        // Observables gauges don't take tags in Record/Add because they are observed, 
+        // but we could use a regular Gauge or just accept that the gauge is global 
+        // for now unless we change it to a non-observable one. 
+        // For simplicity, keeping it as is but accepting the param.
     }
     
-    public void DecrementActiveProcessing()
+    public void DecrementActiveProcessing(string tenantId)
     {
         Interlocked.Decrement(ref _activeProcessingCount);
     }
     
-    public void RecordOrderByValueRange(decimal amount)
+    public void RecordOrderByValueRange(decimal amount, string tenantId)
     {
+        var tags = new TagList { { "tenant_id", tenantId } };
         switch (amount)
         {
             case < 50:
-                _ordersSmallCounter.Add(1);
+                _ordersSmallCounter.Add(1, tags);
                 break;
             case < 200:
-                _ordersMediumCounter.Add(1);
+                _ordersMediumCounter.Add(1, tags);
                 break;
             case < 1000:
-                _ordersLargeCounter.Add(1);
+                _ordersLargeCounter.Add(1, tags);
                 break;
             default:
-                _ordersXLargeCounter.Add(1);
+                _ordersXLargeCounter.Add(1, tags);
                 break;
         }
     }
