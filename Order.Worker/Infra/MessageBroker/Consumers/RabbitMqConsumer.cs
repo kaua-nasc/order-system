@@ -75,8 +75,8 @@ public class RabbitMqConsumer(
         var consumer = new AsyncEventingBasicConsumer(_channel);
         consumer.ReceivedAsync += async (_, ea) => await HandleMessage(ea, token);
 
-        await _channel.BasicConsumeAsync("orders", false, consumer, token);
-        logger.LogInformation("Listening for messages on queue 'orders'...");
+        await _channel.BasicConsumeAsync("orders-processor", false, consumer, token);
+        logger.LogInformation("Listening for messages on queue 'orders-processor'...");
     }
 
     private async Task HandleMessage(BasicDeliverEventArgs ea, CancellationToken token)

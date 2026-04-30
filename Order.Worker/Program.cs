@@ -14,6 +14,7 @@ using Order.Worker.Infra.MessageBroker.Consumers;
 using Order.Worker.Infra.MultiTenant;
 using Order.Worker.Observability.Metrics;
 using Order.Worker.Observability.Tracing;
+using VaultSharp;
 using VaultSharp.Extensions.Configuration;
 using VaultSharp.V1.AuthMethods.Token;
 using Winton.Extensions.Configuration.Consul;
@@ -24,6 +25,8 @@ var vaultUrl = Environment.GetEnvironmentVariable("VAULT_URL")
     ?? throw new InvalidOperationException("VAULT_URL not set");
 var vaultToken = Environment.GetEnvironmentVariable("VAULT_TOKEN") 
     ?? throw new InvalidOperationException("VAULT_TOKEN not set");
+var vaultPath = Environment.GetEnvironmentVariable("VAULT_PATH") 
+    ?? throw new InvalidOperationException("VAULT_PATH not set");
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -36,16 +39,17 @@ var serviceVersion =
 var authMethod = new TokenAuthMethodInfo(vaultToken);
 builder.Configuration.AddVaultConfiguration(
     () => new VaultOptions(vaultUrl, authMethod),
-    "order-system",
+    vaultPath,
     "secret"
 );
 
 builder.Configuration.AddConsul(
-    "tenants",
+    vaultPath,
     options =>
     {
         options.ConsulConfigurationOptions = cco =>
         {
+            // Pega o endereço do Consul que veio do Vault
             cco.Address = new Uri(builder.Configuration.GetValueByKey<string>("Consul:Connection"));
         };
         options.Optional = true;
@@ -53,6 +57,13 @@ builder.Configuration.AddConsul(
         options.ReloadOnChange = true;
     }
 );
+
+builder.Services.AddSingleton<IVaultClient>(sp => 
+{
+    var authMethod = new TokenAuthMethodInfo(vaultToken);
+    var vaultClientSettings = new VaultClientSettings(vaultUrl, authMethod);
+    return new VaultClient(vaultClientSettings);
+});
 
 builder.Services
     .AddSingleton<IAppTracing, AppTracing>()

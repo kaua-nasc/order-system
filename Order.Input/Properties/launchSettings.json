@@ -10,7 +10,8 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "VAULT_URL": "http://localhost:8200",
         "VAULT_TOKEN": "meu-token-super-secreto",
-        "VAULT_PATH": "dev/order-system/order-input"
+        "VAULT_PATH": "dev/order-system/order-input",
+        "VAULT_TENANT_VALUE": "abc"
       }
     }
   }

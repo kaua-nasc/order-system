@@ -11,65 +11,111 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
     public AppDbContext CreateDbContext(string[] args)
     {
+        // 1. Try to get the connection directly from the --connection command
+        string? connectionString = null;
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--connection" && i + 1 < args.Length)
+            {
+                connectionString = args[i + 1];
+                break;
+            }
+        }
+
+        // Determine the correct base path (handle root vs project folder)
+        var basePath = Directory.GetCurrentDirectory();
+        if (!File.Exists(Path.Combine(basePath, "appsettings.json")) && Directory.Exists(Path.Combine(basePath, "Order.Input")))
+        {
+            basePath = Path.Combine(basePath, "Order.Input");
+        }
+
         var builder = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
+            .SetBasePath(basePath)
             .AddJsonFile("appsettings.json", optional: true)
             .AddJsonFile("appsettings.Development.json", optional: true)
             .AddEnvironmentVariables();
 
-        var vaultUrl = Environment.GetEnvironmentVariable("VAULT_URL");
-        var vaultToken = Environment.GetEnvironmentVariable("VAULT_TOKEN");
-
-        if (string.IsNullOrEmpty(vaultUrl) || string.IsNullOrEmpty(vaultToken))
+        // 2. If not provided via command, try to load from environment or launchSettings
+        if (string.IsNullOrEmpty(connectionString))
         {
-            try
+            var vaultUrl = Environment.GetEnvironmentVariable("VAULT_URL");
+            var vaultToken = Environment.GetEnvironmentVariable("VAULT_TOKEN");
+            var vaultTenantValue = Environment.GetEnvironmentVariable("VAULT_TENANT_VALUE");
+            var vaultPath = Environment.GetEnvironmentVariable("VAULT_PATH") ?? "order-system";
+
+            if (string.IsNullOrEmpty(vaultUrl) || string.IsNullOrEmpty(vaultToken))
             {
-                var launchSettingsPath = Path.Combine(Directory.GetCurrentDirectory(), "Properties", "launchSettings.json");
-                if (File.Exists(launchSettingsPath))
+                try
                 {
-                    using var file = File.OpenRead(launchSettingsPath);
-                    using var json = JsonDocument.Parse(file);
-                    
-                    // Busca o primeiro profile que tiver environmentVariables
-                    var profiles = json.RootElement.GetProperty("profiles");
-                    foreach (var profile in profiles.EnumerateObject())
+                    var launchSettingsPath = Path.Combine(basePath, "Properties", "launchSettings.json");
+                    if (File.Exists(launchSettingsPath))
                     {
-                        if (!profile.Value.TryGetProperty("environmentVariables", out var envVars)) continue;
-                        if (string.IsNullOrEmpty(vaultUrl) && envVars.TryGetProperty("VAULT_URL", out var vUrl))
-                            vaultUrl = vUrl.GetString();
-                                
-                        if (string.IsNullOrEmpty(vaultToken) && envVars.TryGetProperty("VAULT_TOKEN", out var vToken))
-                            vaultToken = vToken.GetString();
+                        using var file = File.OpenRead(launchSettingsPath);
+                        using var json = JsonDocument.Parse(file);
+
+                        var profiles = json.RootElement.GetProperty("profiles");
+                        foreach (var profile in profiles.EnumerateObject())
+                        {
+                            if (!profile.Value.TryGetProperty("environmentVariables", out var envVars)) continue;
+                            
+                            if (string.IsNullOrEmpty(vaultUrl) && envVars.TryGetProperty("VAULT_URL", out var vUrl))
+                                vaultUrl = vUrl.GetString();
+
+                            if (string.IsNullOrEmpty(vaultToken) && envVars.TryGetProperty("VAULT_TOKEN", out var vToken))
+                                vaultToken = vToken.GetString();
+                            
+                            if (string.IsNullOrEmpty(vaultTenantValue) && envVars.TryGetProperty("VAULT_TENANT_VALUE", out var vTenantValue))
+                                vaultTenantValue = vTenantValue.GetString();
+
+                            if (envVars.TryGetProperty("VAULT_PATH", out var vPath))
+                                vaultPath = vPath.GetString();
+                        }
                     }
                 }
+                catch { /* Ignore design-time errors */ }
             }
-            catch { /* Ignora erros de leitura de config em tempo de design */ }
-        }
 
-        if (!string.IsNullOrEmpty(vaultUrl) && !string.IsNullOrEmpty(vaultToken))
-        {
-            try 
+            if (!string.IsNullOrEmpty(vaultUrl) && !string.IsNullOrEmpty(vaultToken))
             {
-                var authMethod = new TokenAuthMethodInfo(vaultToken);
-                builder.AddVaultConfiguration(
-                    () => new VaultOptions(vaultUrl, authMethod),
-                    "order-system", 
-                    "secret"
-                );
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Aviso] Falha Vault DesignTime: {ex.Message}");
-            }
-        }
+                try 
+                {
+                    // Hardcoded mount point as requested: "secret"
+                    var mountPoint = "secret";
+                    
+                    // The full path is the combination of VAULT_PATH and VAULT_TENANT_VALUE
+                    var secretPath = vaultPath;
+                    if (!string.IsNullOrEmpty(vaultTenantValue))
+                    {
+                        secretPath = $"{secretPath.TrimEnd('/')}/{vaultTenantValue}";
+                    }
 
-        var configuration = builder.Build();
-        var connectionString = configuration.GetValue<string>("Postgres:Connection")
-             ?? configuration.GetConnectionString("DatabaseTemplate"); 
+                    Console.WriteLine($"[Debug] Tentando Vault: URL={vaultUrl}, Mount={mountPoint}, Path={secretPath}");
+
+                    var authMethod = new TokenAuthMethodInfo(vaultToken);
+                    builder.AddVaultConfiguration(
+                        () => new VaultOptions(vaultUrl, authMethod),
+                        secretPath, 
+                        mountPoint
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Erro] Configuração Vault: {ex.Message}");
+                }
+            }
+
+            var configuration = builder.Build();
+            
+            // Debug: Listar todas as chaves carregadas (opcional, mas ajuda)
+            // Console.WriteLine("[Debug] Chaves carregadas: " + string.Join(", ", configuration.AsEnumerable().Select(x => x.Key)));
+
+            connectionString = configuration.GetValue<string>("Postgres:Connection")
+                 ?? configuration.GetConnectionString("DatabaseTemplate");
+        }
 
         if (string.IsNullOrEmpty(connectionString))
         {
-            connectionString = "Host=localhost;Database=design_time_db;Username=postgres;Password=postgres";
+            throw new Exception($"Missing connection string. Looked in: {basePath}. Use --connection or check Vault/Env config.");
         }
 
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
