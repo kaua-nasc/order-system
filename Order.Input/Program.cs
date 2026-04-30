@@ -90,7 +90,16 @@ var otlpEndpoint = builder.Configuration.GetValueByKey<string>("OpenTelemetry:En
 
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService(serviceName, serviceVersion: serviceVersion, serviceInstanceId: Environment.MachineName))
-    .WithLogging(logging => logging.AddOtlpExporter((cfg, _) => { cfg.Protocol = OtlpExportProtocol.Grpc; cfg.Endpoint = new Uri(otlpEndpoint); }))
+    .WithLogging(logging => 
+    {
+        logging.AddOtlpExporter((cfg, _) => 
+        { 
+            cfg.Protocol = OtlpExportProtocol.Grpc; 
+            cfg.Endpoint = new Uri(otlpEndpoint); 
+        });
+        logging.IncludeScopes = true;
+        logging.IncludeFormattedMessage = true;
+    })
     .WithMetrics(metrics => metrics.AddMeter(serviceName).AddOtlpExporter((cfg, _) => { cfg.Protocol = OtlpExportProtocol.Grpc; cfg.Endpoint = new Uri(otlpEndpoint); }))
     .WithTracing(tracing => tracing
         .AddSource(serviceName)
@@ -120,6 +129,7 @@ app.MapPost("/register/order",
     {
         using var act = tracer.StartActivity("RegisterOrder", ActivityKind.Producer);
         var tenantId = tenantService.TenantId ?? "unknown";
+        using var scope = logger.BeginScope(new Dictionary<string, object> { ["order_id"] = order.OrderId });
         try
         {
             metrics.IncrementOrderCounter(tenantId);

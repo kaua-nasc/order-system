@@ -2,7 +2,7 @@ using Order.Input.Infra.MultiTenant;
 
 namespace Order.Input.Middlewares;
 
-public class TenantMiddleware(RequestDelegate next)
+public class TenantMiddleware(RequestDelegate next, ILogger<TenantMiddleware> logger)
 {
     public async Task InvokeAsync(HttpContext context, TenantService tenantService)
     {
@@ -17,6 +17,9 @@ public class TenantMiddleware(RequestDelegate next)
         
         tenantService.SetTenant(tenantId);
         
-        await next(context);
+        using (logger.BeginScope(new Dictionary<string, object> { ["tenant_id"] = tenantId }))
+        {
+            await next(context);
+        }
     }
 }

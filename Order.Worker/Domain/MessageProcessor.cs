@@ -14,6 +14,11 @@ public class MessageProcessor(ILogger<MessageProcessor> logger, IAppTracing trac
     public async Task Process(OrderMessage message)
     {
         var tenantId = tenantService.TenantId ?? "unknown";
+        using var scope = logger.BeginScope(new Dictionary<string, object> 
+        { 
+            ["tenant_id"] = tenantId,
+            ["order_id"] = message.OrderId 
+        });
         var stopwatch = Stopwatch.StartNew();
         metrics.IncrementActiveProcessing(tenantId);
         OrderEntity? order = null;
@@ -43,13 +48,13 @@ public class MessageProcessor(ILogger<MessageProcessor> logger, IAppTracing trac
             metrics.RecordOrderValue(order.TotalAmount, tenantId);
             metrics.RecordOrderByValueRange(order.TotalAmount, tenantId);
 
-            logger.LogInformation("Order {OrderId} processed", message.OrderId);
+            logger.LogInformation("Order processed successfully");
             metrics.IncrementMessagesConsumed(tenantId);
         }
         catch (NotFoundException)
         {
             metrics.IncrementProcessingErrors(tenantId);
-            logger.LogError("Order {OrderId} not found", message.OrderId);
+            logger.LogError("Order not found");
             throw;
         }
         catch (Exception ex)
@@ -60,16 +65,16 @@ public class MessageProcessor(ILogger<MessageProcessor> logger, IAppTracing trac
                 {
                     order.MarkAsFailed();
                     await context.SaveChangesAsync();
-                    logger.LogWarning("Order {OrderId} marked as failed due to an error.", message.OrderId);
+                    logger.LogWarning("Order marked as failed due to an error");
                 }
                 catch (Exception dbEx)
                 {
-                    logger.LogError(dbEx, "Failed to update order {OrderId} status to Error", message.OrderId);
+                    logger.LogError(dbEx, "Failed to update order status to Error");
                 }
             }
 
             metrics.IncrementProcessingErrors(tenantId);
-            logger.LogError(ex, "Error while processing order {OrderId}", message.OrderId);
+            logger.LogError(ex, "Error while processing order");
             throw;
         }
         finally
