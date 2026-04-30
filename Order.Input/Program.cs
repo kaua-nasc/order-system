@@ -97,8 +97,6 @@ builder.Services.AddOpenTelemetry()
             cfg.Protocol = OtlpExportProtocol.Grpc; 
             cfg.Endpoint = new Uri(otlpEndpoint); 
         });
-        logging.IncludeScopes = true;
-        logging.IncludeFormattedMessage = true;
     })
     .WithMetrics(metrics => metrics.AddMeter(serviceName).AddOtlpExporter((cfg, _) => { cfg.Protocol = OtlpExportProtocol.Grpc; cfg.Endpoint = new Uri(otlpEndpoint); }))
     .WithTracing(tracing => tracing
